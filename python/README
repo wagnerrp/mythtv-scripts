@@ -1,1 +1,9 @@
 Assorted tools that interface with the MythTV python bindings.
+
+bookmarks.py - tool for importing firefox bookmarks into mythbrowser
+delete_recordings.py - tool for deleting recordings from MythTV based off multiple search options
+myth_video_scan.py - command line scanner for MythVideo
+mythfs.py - fusefs filesystem for mounting recordings based off a user-definable directory structure
+mythremctl.py - curses based program for interfacing with the frontend control socket
+mythvidexport.py - userjob for exporting recordings to mythvideo, complete with metadata
+transcode_wrapper_stub.py - userjob stub for performing whatever database actions are needed to transcode a recording in-place
