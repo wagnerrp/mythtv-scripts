@@ -6,19 +6,18 @@ import os
 import sys
 from HTMLParser import HTMLParser
 try:
-    from MythTV import MythDB, DBDataWrite
+    from MythTV import MythDB
+    from MythTV.database import DBDataWrite
 except:
     print 'ERROR: The python bindings are not installed'
     sys.exit(-1)
 
 class Bookmark( DBDataWrite ):
-    table = 'websites'
-    where = 'id=%s'
-    setwheredat = 'self.id,'
-    defaults = {'id':None, 'category':u'', 'name':u'', 'url':u''}
-    schema_value = 'BrowserDBSchemaVer'
-    schema_local = 1002
-    schema_name = 'MythBrowser'
+    _table = 'websites'
+    _defaults = {'id':None, 'category':u'', 'name':u'', 'url':u''}
+    _schema_value = 'BrowserDBSchemaVer'
+    _schema_local = 1002
+    _schema_name = 'MythBrowser'
 
     def create(self, data=None):
         id = DBDataWrite.create(self, data)

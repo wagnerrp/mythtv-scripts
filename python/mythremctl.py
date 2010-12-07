@@ -1,30 +1,15 @@
 #!/usr/bin/env python
-from MythTV import MythDB, MythError, MythLog
-from curses import wrapper, ascii
-from time   import sleep
+from MythTV import MythDB, MythError, MythLog, Frontend
+
+from datetime import datetime, timedelta
+from curses   import wrapper, ascii
+from time     import sleep
 import sys, socket, curses, re
 
 #note for ticket, on-screen-keyboard remotely does not have focus
 
 MythLog._setlevel('none')
-myth = MythDB()
 frontend = None
-
-keys = {        9:'tab',            10:'enter',    
-27:'escape',    32:'space',         35:'poundsign', 
-36:'dollar',    37:'percent',       38:'ampersand',
-40:'parenleft', 41:'parenright',    42:'asterisk',
-43:'plus',      44:'comma',         45:'minus',
-46:'period',    47:'/',             58:'colon',
-59:'semicolon', 60:'less',          61:'equal',
-62:'greater',   63:'question',      91:'bracketleft',
-92:'backslash', 93:'bracketright',  95:'underscore',
-124:'pipe',     127:'backspace',    258:'down',
-259:'up',       260:'left',         261:'right',
-269:'f5',       270:'f6',           271:'f7',
-272:'f8',       273:'f9',           274:'f10',
-275:'f11',      276:'f12',          330:'delete',
-331:'insert',   338:'pagedown',     339:'pageup'}
 
 rplaytype = re.compile('Playback ([a-zA-Z]+)')
 rrecorded = re.compile('Playback ([a-zA-Z]+) ([\d:]+) of ([\d:]+) ([-0-9\.]+x) (\d*) ([0-9-T:]+)')
@@ -45,31 +30,55 @@ def align(side, window, y, string, flush=0):
         x = w-len(string)
     window.addstr(y,x,string)
 
-def query_time(w):
-    time = frontend.sendQuery('time').split('T')[1]
+def query_time(w, _dat=[0]):
+    if _dat[0] == 0:
+        ltime   = datetime.now()
+        fetime  = frontend.getTime()
+        _dat[0] = fetime - ltime
+    time = datetime.now()+_dat[0]
     w.erase()
-    w.border()
-    align(1,w,1,time)
+    w.border(curses.ACS_VLINE,    curses.ACS_VLINE,
+             curses.ACS_HLINE,    curses.ACS_HLINE,
+             curses.ACS_ULCORNER, curses.ACS_TTEE,
+             curses.ACS_LTEE,     curses.ACS_RTEE)
+    align(1,w,1,time.strftime('%H:%M:%S'))
     w.noutrefresh()
 
-def query_load(w):
-    loads = frontend.sendQuery('load').split(' ')
+def query_load(w, _dat=[0]):
+    if _dat[0] == 0:
+        _dat[0] = datetime.now()
+    now = datetime.now()
+    if _dat[0] > now:
+        return
+    _dat[0] = now+timedelta(seconds=5)
+
+    loads = frontend.getLoad()
     w.erase()
-    w.border()
+    w.border(curses.ACS_VLINE,    curses.ACS_VLINE,
+             curses.ACS_HLINE,    curses.ACS_HLINE,
+             curses.ACS_LTEE,     curses.ACS_RTEE,
+             curses.ACS_LTEE,     curses.ACS_RTEE)
     align(0,w,2,'loads')
-    align(2,w,1,'1:     ')
-    align(2,w,2,'5:     ')
-    align(2,w,3,'15:     ')
-    align(2,w,1,loads[0],5)
-    align(2,w,2,loads[1],5)
-    align(2,w,3,loads[2],5)
+    align(2,w,1,' 1: {0:0.2f}'.format(loads[0]))
+    align(2,w,2,' 5: {0:0.2f}'.format(loads[1]))
+    align(2,w,3,'15: {0:0.2f}'.format(loads[2]))
     w.noutrefresh()
 
-def query_loc(w):
+def query_loc(w, _dat=[0]):
+    if _dat[0] == 0:
+        _dat[0] = datetime.now()
+    now = datetime.now()
+    if _dat[0] > now:
+        return
+    _dat[0] = now+timedelta(seconds=5)
+
     loc = frontend.sendQuery('location')
     pb = rplaytype.match(loc)
     w.erase()
-    w.border()
+    w.border(curses.ACS_VLINE,    curses.ACS_VLINE,
+             curses.ACS_HLINE,    curses.ACS_HLINE,
+             curses.ACS_TTEE,     curses.ACS_URCORNER,
+             curses.ACS_BTEE,     curses.ACS_LRCORNER)
     if pb:
         if pb.group(1) == 'Video':
             pb = rvideo.match(loc)
@@ -93,14 +102,24 @@ def query_loc(w):
         align(0,w,1,'  '+loc)
     w.noutrefresh()
 
-def query_mem(w):
-    mem = frontend.sendQuery('memstats').split(' ')
+def query_mem(w, _dat=[0]):
+    if _dat[0] == 0:
+        _dat[0] = datetime.now()
+    now = datetime.now()
+    if _dat[0] > now:
+        return
+    _dat[0] = now+timedelta(seconds=15)
+
+    mem = frontend.getMemory()
     w.erase()
-    w.border()
+    w.border(curses.ACS_VLINE,    curses.ACS_VLINE,
+             curses.ACS_HLINE,    curses.ACS_HLINE,
+             curses.ACS_LTEE,     curses.ACS_RTEE,
+             curses.ACS_LLCORNER, curses.ACS_BTEE)
     align(0,w,1,'phy:')
     align(0,w,2,'swp:')
-    align(2,w,1,"%sM/%sM" % (mem[1],mem[0]))
-    align(2,w,2,"%sM/%sM" % (mem[3],mem[2]))
+    align(2,w,1,"%sM/%sM" % (mem['freemem'],mem['totalmem']))
+    align(2,w,2,"%sM/%sM" % (mem['freeswap'],mem['totalswap']))
     w.noutrefresh()
 
 def main(w):
@@ -117,7 +136,10 @@ def main(w):
     conn = w.derwin(4,20,2,0)
     align(2,conn,1,frontend.host)
     align(2,conn,2,"%s:%d" % frontend.socket.getpeername())
-    conn.border()
+    conn.border(curses.ACS_VLINE,    curses.ACS_VLINE,
+                curses.ACS_HLINE,    curses.ACS_HLINE,
+                curses.ACS_LTEE,     curses.ACS_RTEE,
+                curses.ACS_LTEE,     curses.ACS_RTEE)
 
     time = w.derwin(3,20,0,0)
     query_time(time)
@@ -137,15 +159,7 @@ def main(w):
 
             a = w.getch()
             curses.flushinp()
-            if a == -1:
-                continue
-            if a in keys:
-                s = keys[a]
-            elif ascii.isalnum(a):
-                s = chr(a)
-            else:
-                continue
-            frontend.sendKey(s)
+            frontend.key[a]
         except KeyboardInterrupt:
             break
         except EOFError:
@@ -157,10 +171,11 @@ def main(w):
             raise
 
 if __name__ == '__main__':
-    frontends = None
     if len(sys.argv) == 2:
         try:
-            frontend = myth.getFrontend(sys.argv[1])
+            db = MythDB()
+            frontend = db.getFrontend(sys.argv[1])
+            wrapper(main)
         except socket.timeout:
             print "Could not connect to "+sys.argv[1]
             pass
@@ -171,25 +186,27 @@ if __name__ == '__main__':
             sys.exit()
         except:
             raise
-    if frontend is None:
+    else:
         print "Please choose from the following available frontends:"
-    while frontend is None:
-        if frontends is None:
-            frontends = myth.getFrontends()
-            if len(frontends) == 0:
-                print "No frontends detected"
+        frontends = None
+        while frontend is None:
+            if frontends is None:
+                frontends = list(Frontend.fromUPNP())
+                if len(frontends) == 0:
+                    print "No frontends detected"
+                    sys.exit()
+            for i,f in enumerate(frontends):
+                print "%d. %s" % (i+1, f)
+            try:
+                i = int(raw_input('> '))-1
+                if i in range(0,len(frontends)):
+                    frontend = frontends[i]
+                    wrapper(main)
+            except KeyboardInterrupt:
                 sys.exit()
-        for i in range(0,len(frontends)):
-            print "%d. %s" % (i+1, frontends[i])
-        try:
-            i = int(raw_input('> '))-1
-            if i in range(0,len(frontends)):
-                frontend = frontends[i]
-        except KeyboardInterrupt:
-            sys.exit()
-        except EOFError:
-            sys.exit()
-        except:
-            print "This input will only accept a number. Use Crtl-C to exit"
-    wrapper(main)
+            except EOFError:
+                sys.exit()
+            except:
+                raise
+                print "This input will only accept a number. Use Crtl-C to exit"
 

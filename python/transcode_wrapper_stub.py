@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from MythTV import Job, Recorded, Grabber
+from MythTV import Job, Recorded, System
 
 from optparse import OptionParser
 import sys
@@ -14,16 +14,15 @@ build_seektable = False
 ################################
 
 def runjob(jobid=None, chanid=None, starttime=None):
+    db = MythDB()
     if jobid:
-        job = Job(jobid)
+        job = Job(jobid, db=db)
         chanid = job.chanid
         starttime = job.starttime
-    rec = Recorded((chanid, starttime))
+    rec = Recorded((chanid, starttime), db=db)
 
-    for sg in rec.db.getStorageGroup(groupname=rec.storagegroup):
-        if os.access(os.path.join(sg.dirname, rec.basename), os.F_OK):
-            break
-    else:
+    sg = findfile(rec.basename, rec.storagegroup, db=db)
+    if sg is None:
         print 'Local access to recording not found.'
         sys.exit(1)
 
@@ -45,23 +44,18 @@ def runjob(jobid=None, chanid=None, starttime=None):
     os.remove(infile)
     rec.filesize = os.path.getsize(outfile)
     rec.transcoded = 1
-    c = rec.db.cursor()
-    c.execute("""DELETE FROM recordedseek
-                 WHERE chanid=%s AND starttime=%s""",
-                         (chanid, starttime))
-    c.close()
+    rec.seek.clean()
 
     if flush_commskip:
-        c = rec.db.cursor()
-        c.execute("""DELETE FROM recordedmarkup
-                     WHERE chanid=%s AND starttime=%s""",
-                         (chanid, starttime))
-        c.close()
+        for index,mark in reversed(list(enumerate(rec.markup))):
+            if mark.type in (rec.markup.MARK_COMM_START, rec.markup.MARK_COMM_END):
+                del rec.markup[index]
         rec.bookmark = 0
         rec.cutlist = 0
+        rec.markup.commit()
 
     if build_seektable:
-        task = Grabber(path='mythcommflag')
+        task = System(path='mythcommflag')
         task.command('--chanid %s' % chanid,
                      '--starttime %s' % starttime,
                      '--rebuild')

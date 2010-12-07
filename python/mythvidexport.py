@@ -10,7 +10,7 @@
 #---------------------------
 __title__  = "MythVidExport"
 __author__ = "Raymond Wagner"
-__version__= "v0.6.0"
+__version__= "v0.7.2"
 
 usage_txt = """
 This script can be run from the command line, or called through the mythtv
@@ -27,6 +27,9 @@ Options are:
         --listingonly
             use EPG data rather than grabbers for metadata
             will still try to grab episode and season information from ttvdb.py
+        --seektable            copy seek data from recording
+        --skiplist             copy commercial detection from recording
+        --cutlist              copy manual commercial cutlist from recording
 
 Additional functions are available beyond exporting video
   mythvidexport.py <options>
@@ -38,75 +41,65 @@ Additional functions are available beyond exporting video
         --gformat <string>     replace existing Generic format
 """
 
-from MythTV import MythDB, Job, Video, VideoGrabber, MythLog, MythError
-from socket import gethostname
-from urllib import urlopen
+from MythTV import MythDB, Job, Recorded, Video, VideoGrabber,\
+                   MythLog, MythError, static
 from optparse import OptionParser
-from ConfigParser import SafeConfigParser
+from socket import gethostname
 
 import sys, re, os, time
 
+MYVER = (0,24,0)
+import MythTV
+if MythTV.__version__[:3] != MYVER:
+    raise Exception('This script expects bindings of version %s.  The currently installed version is %s.'\
+                             % ('.'.join(MYVER), '.'.join(MythTV.__version__))
+
+def create_dummy_video(db=None):
+    db = MythDB(db)
 
 class VIDEO:
     def __init__(self, opts, jobid=None):
         if jobid:
             self.job = Job(jobid)
             self.chanid = self.job.chanid
-            self.starttime = int("%04d%02d%02d%02d%02d%02d" \
-                        % self.job.starttime.timetuple()[0:6])
+            self.starttime = self.job.starttime
             self.job.update(status=3)
         else:
             self.job = None
             self.chanid = opts.chanid
-            self.rtime = opts.starttime
+            self.starttime = opts.starttime
 
         self.opts = opts
         self.db = MythDB()
         self.log = MythLog(module='mythvidexport.py', db=self.db)
 
         # load setting strings
-        self.get_grabbers()
         self.get_format()
 
-        # process file
-        self.cast = []
-        self.genre = []
-        self.country = []
-        self.rec = self.db.getRecorded(chanid=self.chanid,\
-                                    starttime=self.starttime)
-        self.vid = Video()
-        self.vid.host = gethostname()
+        # prep objects
+        self.rec = Recorded((self.chanid,self.starttime), db=self.db)
+        self.log(MythLog.IMPORTANT, 'Using recording', 
+                        '%s - %s' % (self.rec.title, self.rec.subtitle))
+        self.vid = Video(db=self.db).create({'title':'', 'filename':'', 'host':gethostname()})
 
+        # process data
         self.get_meta()
         self.get_dest()
 
         # save file
         self.copy()
-        self.write_images()
-        self.vid.create()
-        self.write_cref()
-
-    def get_grabbers(self):
-        # TV Grabber
-        self.TVgrab = VideoGrabber('TV')
-        # if ttvdb.py, optionally add config file
-        if 'ttvdb.py' in self.TVgrab.path:
-            path = os.path.expanduser('~/.mythtv/ttvdb.conf')
-            if os.access(path, os.F_OK):
-                # apply title overrides
-                cfg = SafeConfigParser()
-                cfg.read(path)
-                if 'series_name_override' in cfg.sections():
-                    ovr = [(title, cfg.get('series_name_override',title)) \
-                            for title in cfg.options('series_name_override')]
-                    self.TVgrab.setOverride(ovr)
-                    self.TVgrab.append(' -c '+path)
-
-        # Movie Grabber
-        self.Mgrab = VideoGrabber('Movie')
+        if opts.seekdata:
+            self.copy_seek()
+        if opts.skiplist:
+            self.copy_markup(static.MARKUP.MARK_COMM_START,
+                             static.MARKUP.MARK_COMM_END)
+        if opts.cutlist:
+            self.copy_markup(static.MARKUP.MARK_CUT_START,
+                             static.MARKUP.MARK_CUT_END)
+        self.vid.update()
 
     def get_format(self):
-        host = gethostname()
+        host = self.db.gethostname()
         # TV Format
         if self.opts.tformat:
             self.tfmt = self.opts.tformat
@@ -133,62 +126,31 @@ class VIDEO:
             self.gfmt = 'Videos/%TITLE%'
 
     def get_meta(self):
-        self.vid.hostname = gethostname()
+        self.vid.hostname = self.db.gethostname()
         if self.rec.subtitle:  # subtitle exists, assume tv show
-            self.get_tv()
+            self.type = 'TV'
+            self.log(self.log.IMPORTANT, 'Attempting TV export.')
+            grab = VideoGrabber(self.type)
+            match = grab.sortedSearch(self.rec.title, self.rec.subtitle)
         else:                   # assume movie
-            self.get_movie()
+            self.type = 'MOVIE'
+            self.log(self.log.IMPORTANT, 'Attempting Movie export.')
+            grab = VideoGrabber(self.type)
+            match = grab.sortedSearch(self.rec.title)
 
-    def get_tv(self):
-        # grab season and episode number, run generic export if failed
-        match = self.TVgrab.searchTitle(self.rec.title)
         if len(match) == 0:
             # no match found
+            self.log(self.log.IMPORTANT, 'Falling back to generic export.')
             self.get_generic()
-            return
-        elif len(match) > 1:
-            # multiple matches found
-            raise MythError('Multiple TV metadata matches found: '\
-                                                    +self.rec.title)
-        inetref = match[0][0]
-
-        season, episode = self.TVgrab.searchEpisode(self.rec.title, \
-                                                    self.rec.subtitle)
-        if season is None:
-            # no match found
-            self.get_generic()
-            return
-        self.vid.season, self.vid.episode = season, episode
-
-        if self.opts.listingonly:
-            self.get_generic()
+        elif (len(match) > 1) & (match[0].levenshtein > 0):
+            # multiple matches found, and closest is not exact
+            self.vid.delete()
+            raise MythError('Multiple metadata matches found: '\
+                                                   +self.rec.title)
         else:
-            dat, self.cast, self.genre, self.country = \
-                    self.TVgrab.getData(inetref,\
-                                        self.vid.season,\
-                                        self.vid.episode)
-            self.vid.data.update(dat)
-            self.vid.title = self.rec.title
-            self.vid.season, self.vid.episode = season, episode
-        self.type = 'TV'
-
-    def get_movie(self):
-        inetref = self.Mgrab.searchTitle(self.rec.title,\
-                            self.rec.originalairdate.year)
-        if len(inetref) == 1:
-            inetref = inetref[0][0]
-        else:
-            self.get_generic()
-            return
-
-        if self.opts.listingonly:
-            self.get_generic()
-        else:
-            dat, self.cast, self.genre, self.country = \
-                    self.Mgrab.getData(inetref)
-            self.vid.data.update(dat)
-            self.vid.title = self.rec.title
-        self.type = 'Movie'
+            self.log(self.log.IMPORTANT, 'Importing content from', match[0].inetref)
+            self.vid.importMetadata(grab.grabInetref(match[0]))
+            self.log(self.log.IMPORTANT, 'Import complete')
 
     def get_generic(self):
         self.vid.title = self.rec.title
@@ -205,7 +167,7 @@ class VIDEO:
             if member.role == 'director':
                 self.vid.director = member.name
             elif member.role == 'actor':
-                self.cast.append(member.name)
+                self.vid.cast.append(member.name)
         self.type = 'GENERIC'
 
     def get_dest(self):
@@ -243,8 +205,8 @@ class VIDEO:
 #       fmt = fmt.replace('%CHANNUM%',self.rec.channum)
 #       fmt = fmt.replace('%CHANNAME%',self.rec.cardid)
 
-        if len(self.genre):
-            fmt = fmt.replace('%GENRE%',self.genre[0])
+        if len(self.vid.genre):
+            fmt = fmt.replace('%GENRE%',self.vid.genre[0].genre)
         else:
             fmt = fmt.replace('%GENRE%','')
 #       if len(self.country):
@@ -254,14 +216,6 @@ class VIDEO:
         return fmt+ext
 
     def copy(self):
-        if self.opts.skip:
-            self.vid.hash = self.vid.getHash()
-            return
-        if self.opts.sim:
-            return
-
-        #print self.vid.filename
-
         stime = time.time()
         srcsize = self.rec.filesize
         htime = [stime,stime,stime,stime]
@@ -290,54 +244,21 @@ class VIDEO:
 
         self.vid.hash = self.vid.getHash()
 
-        self.log.log(MythLog.IMPORTANT|MythLog.FILE, "Transfer Complete",
-                            "% seconds elapsed" % int(time.time()-stime))
+        self.log(MythLog.IMPORTANT|MythLog.FILE, "Transfer Complete",
+                            "%d seconds elapsed" % int(time.time()-stime))
         if self.job:
             self.job.setComment("Complete - %d seconds elapsed" % \
                             (int(time.time()-stime)))
             self.job.setStatus(256)
 
-    def write_images(self):
-        for type in ('coverfile', 'screenshot', 'banner', 'fanart'):
-            if self.vid[type] in ('No Cover','',None):
-                continue
-            if type == 'coverfile': name = 'coverart'
-            else: name = type
-            url = self.vid[type]
-            if ',' in url:
-                url = url.split(',')[0]
+    def copy_seek(self):
+        for seek in self.rec.seek:
+            self.vid.markup.add(seek.mark, seek.offset, seek.type)
 
-            if self.type == 'TV':
-                if type == 'screenshot':
-                    self.vid[type] = '%s Season %dx%d_%s.%s' % \
-                                (self.vid.title, self.vid.season, 
-                                self.vid.episode, name, url.rsplit('.',1)[1])
-                else:
-                    self.vid[type] = '%s Season %d_%s.%s' % \
-                                (self.vid.title, self.vid.season,
-                                 name, url.rsplit('.',1)[1])
-            else:
-                self.vid[type] = '%s_%s.%s' % \
-                            (self.vid.title, name, url.rsplit('.',1)[1])
-
-            try:
-                dstfp = self.vid._open(type, 'w', True)
-                srcfp = urlopen(url)
-                dstfp.write(srcfp.read())
-                srcfp.close()
-                dstfp.close()
-            except:
-                #print 'existing images: ' + self.vid[type]
-                pass
-
-    def write_cref(self):
-        for member in self.cast:
-            self.vid.cast.add(member)
-        for member in self.genre:
-            self.vid.genre.add(member)
-        for member in self.country:
-            self.vid.country.add(member)
-
+    def copy_markup(self, start, stop):
+        for mark in self.rec.markup:
+            if mark.type in (start, stop):
+                self.vid.markup.add(mark.mark, 0, mark.type)
 
 def usage_format():
     usagestr = """The default strings are:
@@ -403,9 +324,12 @@ def main():
             help="Use starttime for manual operation")
     parser.add_option("--listingonly", action="store_true", default=False, dest="listingonly",
             help="Use data from listing provider, rather than grabber")
-    parser.add_option("-s", "--simulation", action="store_true", default=False, dest="sim",
-            help="Simulation (dry run), no files are copied or new entries made")
-    parser.add_option("--skip", action="store_true", default=False, dest="skip") # debugging use only
+    parser.add_option("--seekdata", action="store_true", default=False, dest="seekdata",
+            help="Copy seekdata from source recording.")
+    parser.add_option("--skiplist", action="store_true", default=False, dest="skiplist",
+            help="Copy commercial detection from source recording.")
+    parser.add_option("--cutlist", action="store_true", default=False, dest="cutlist",
+            help="Copy manual commercial cuts from source recording.")
     parser.add_option('-v', '--verbose', action='store', type='string', dest='verbose',
             help='Verbosity level')
 
@@ -433,6 +357,7 @@ def main():
         except Exception, e:
             Job(int(args[0])).update({'status':304,
                                       'comment':'ERROR: '+e.args[0]})
+            raise
             sys.exit(1)
     else:
         if opts.tformat or opts.mformat or opts.gformat:
