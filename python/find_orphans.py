@@ -52,7 +52,7 @@ def printfiles(title, files):
 
 def populate(host=None):
     unfiltered = []
-    kwargs = {}
+    kwargs = {'livetv':True}
     if host:
         with DB as c:
             c.execute("""SELECT count(1) FROM settings
