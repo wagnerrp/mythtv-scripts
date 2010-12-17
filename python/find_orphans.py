@@ -23,7 +23,7 @@ class File( str ):
         self.path = path
         self.size = int(size)
     def pprint(self):
-        name = '%s:%s' % (self.host, os.path.join(self.path, self))
+        name = '%s: %s' % (self.host, os.path.join(self.path, self))
         print '  {0:<90}{1:>8}'.format(name, human_size(self.size))
     def delete(self):
         be = MythBE(self.host, db=DB)
@@ -32,7 +32,7 @@ class File( str ):
 class MyRecorded( Recorded ):
     _table = 'recorded'
     def pprint(self):
-        name = self.title
+        name = '{0.hostname}: {0.title}'.format(self)
         if self.subtitle:
             name += ' - '+self.subtitle
         print '  {0:<70}{1:>28}'.format(name,self.basename)
