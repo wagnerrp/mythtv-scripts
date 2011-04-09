@@ -136,7 +136,7 @@ def delete_recs(recs):
         name = u'{0.hostname}: {0.title}'.format(self)
         if self.subtitle:
             name += ' - '+self.subtitle
-        print 'Warning: Failed to delete ' + name
+        print "Warning: Failed to delete '" + name + "'"
     except KeyboardInterrupt:
         pass
     except EOFError:
