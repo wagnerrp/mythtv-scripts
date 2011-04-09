@@ -41,18 +41,20 @@ Additional functions are available beyond exporting video
         --gformat <string>     replace existing Generic format
 """
 
+#MYVER = (0,24,0)
+#import MythTV
+#if MythTV.__version__[:3] != MYVER:
+#    raise Exception('This script expects bindings of version %s. ' +\ 
+#                    'The currently installed version is %s.'\
+#                         % ('.'.join([str(i) for i in MYVER]),
+#                            '.'.join([str(i) for i in MythTV.__version__])))
+
 from MythTV import MythDB, Job, Recorded, Video, VideoGrabber,\
                    MythLog, MythError, static
 from optparse import OptionParser
 from socket import gethostname
 
 import sys, re, os, time
-
-MYVER = (0,24,0)
-import MythTV
-if MythTV.__version__[:3] != MYVER:
-    raise Exception('This script expects bindings of version %s.  The currently installed version is %s.'\
-                             % ('.'.join(MYVER), '.'.join(MythTV.__version__))
 
 def create_dummy_video(db=None):
     db = MythDB(db)

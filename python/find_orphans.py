@@ -24,7 +24,7 @@ class File( str ):
         self.size = int(size)
     def pprint(self):
         name = '%s: %s' % (self.host, os.path.join(self.path, self))
-        print '  {0:<90}{1:>8}'.format(name, human_size(self.size))
+        print u'  {0:<90}{1:>8}'.format(name, human_size(self.size))
     def delete(self):
         be = MythBE(self.host, db=DB)
         be.deleteFile(self, self.group)
@@ -32,23 +32,23 @@ class File( str ):
 class MyRecorded( Recorded ):
     _table = 'recorded'
     def pprint(self):
-        name = '{0.hostname}: {0.title}'.format(self)
+        name = u'{0.hostname}: {0.title}'.format(self)
         if self.subtitle:
             name += ' - '+self.subtitle
-        print '  {0:<70}{1:>28}'.format(name,self.basename)
+        print u'  {0:<70}{1:>28}'.format(name,self.basename)
 
 def printrecs(title, recs):
     print title
     for rec in sorted(recs, key=lambda x: x.title):
         rec.pprint()
-    print '{0:>88}{1:>12}'.format('Count:',len(recs))
+    print u'{0:>88}{1:>12}'.format('Count:',len(recs))
 
 def printfiles(title, files):
     print title
     for f in sorted(files, key=lambda x: x.path):
         f.pprint()
     size = sum([f.size for f in files])
-    print '{0:>88}{1:>12}'.format('Total:',human_size(size))
+    print u'{0:>88}{1:>12}'.format('Total:',human_size(size))
 
 def populate(host=None):
     unfiltered = []
@@ -132,6 +132,11 @@ def delete_recs(recs):
                 break
             else:
                 res = raw_input("'yes' or 'no' > ")
+    except MythError:
+        name = u'{0.hostname}: {0.title}'.format(self)
+        if self.subtitle:
+            name += ' - '+self.subtitle
+        print 'Warning: Failed to delete ' + name
     except KeyboardInterrupt:
         pass
     except EOFError:
@@ -174,12 +179,12 @@ def main(host=None):
             printfiles("Other files", unfiltered)
 
         opts = []
-#        if len(recs):
-#            opts.append(['Delete orphaned recording entries', delete_recs, recs])
+        if len(recs):
+            opts.append(['Delete orphaned recording entries', delete_recs, recs])
         if len(zerorecs):
             opts.append(['Delete zero byte recordings', delete_recs, zerorecs])
-#        if len(orphvids):
-#            opts.append(['Delete orphaned video files', delete_files, orphvids])
+        if len(orphvids):
+            opts.append(['Delete orphaned video files', delete_files, orphvids])
         if len(orphimgs):
             opts.append(['Delete orphaned snapshots', delete_files, orphimgs])
         if len(unfiltered):
@@ -187,7 +192,7 @@ def main(host=None):
         opts.append(['Refresh list', None, None])
         print 'Please select from the following'
         for i, opt in enumerate(opts):
-            print ' {0}. {1}'.format(i+1, opt[0])
+            print u' {0}. {1}'.format(i+1, opt[0])
 
         try:
             inner = True
