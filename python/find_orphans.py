@@ -15,6 +15,7 @@ def human_size(s):
     return str(round(s,1))+('B ','KB','MB','GB')[o]
 
 class File( str ):
+    #Utility class to allow deletion and terminal printing of files.
     def __new__(self, host, group, path, name, size):
         return str.__new__(self, name)
     def __init__(self, host, group, path, name, size):
@@ -30,6 +31,7 @@ class File( str ):
         be.deleteFile(self, self.group)
 
 class MyRecorded( Recorded ):
+    #Utility class to allow deletion and terminal printing of orphaned recording entries.
     _table = 'recorded'
     def pprint(self):
         name = u'{0.hostname}: {0.title}'.format(self)
@@ -38,12 +40,14 @@ class MyRecorded( Recorded ):
         print u'  {0:<70}{1:>28}'.format(name,self.basename)
 
 def printrecs(title, recs):
+    # print out all recordings in list, followed by a count
     print title
     for rec in sorted(recs, key=lambda x: x.title):
         rec.pprint()
     print u'{0:>88}{1:>12}'.format('Count:',len(recs))
 
 def printfiles(title, files):
+    # print out all files in list, followed by a total size
     print title
     for f in sorted(files, key=lambda x: x.path):
         f.pprint()
@@ -51,9 +55,12 @@ def printfiles(title, files):
     print u'{0:>88}{1:>12}'.format('Total:',human_size(size))
 
 def populate(host=None):
+    # scan through all accessible backends to generate a new list of orphaned content
     unfiltered = []
     kwargs = {'livetv':True}
     if host:
+        # if the host was defined on the command line, check to make sure such a
+        # host is defined in the database
         with DB as c:
             c.execute("""SELECT count(1) FROM settings
                          WHERE hostname=%s AND value=%s""",
@@ -63,12 +70,16 @@ def populate(host=None):
         hosts = [host]
         kwargs['hostname'] = host
     else:
+        # else, pull a list of all defined backends from the database
         with DB as c:
             c.execute("""SELECT hostname FROM settings
                          WHERE value='BackendServerIP'""")
             hosts = [r[0] for r in c.fetchall()]
     for host in hosts:
         for sg in DB.getStorageGroup():
+            # skip special storage groups intended for MythVideo
+            # this list will need to be added to as additional plugins
+            # start using their own storage groups
             if sg.groupname in ('Videos','Banners','Coverart',\
                                 'Fanart','Screenshots','Trailers'):
                 continue
@@ -76,6 +87,9 @@ def populate(host=None):
                 dirs,files,sizes = BE.getSGList(host, sg.groupname, sg.dirname)
                 for f,s in zip(files,sizes):
                     newfile = File(host, sg.groupname, sg.dirname, f, s)
+                    # each filename should be unique among all storage directories
+                    # defined on all backends
+                    # store one copy of a file, ignoring where the file actually exists
                     if newfile not in unfiltered:
                         unfiltered.append(newfile)
             except:
@@ -86,22 +100,30 @@ def populate(host=None):
     zerorecs = []
     orphvids = []
     for rec in list(recs):
+        # run through list of recordings, matching recording basenames with
+        # found files, and removing from both lists
         if rec.basename in unfiltered:
             recs.remove(rec)
             i = unfiltered.index(rec.basename)
             f = unfiltered.pop(i)
             if f.size < 1024:
                 zerorecs.append(rec)
+            # remove any file with the same basename, these could be snapshots, failed
+            # transcode temporary files, or anything else relating to a non-orphaned
+            # recording
             name = rec.basename.rsplit('.',1)[0]
             for f in list(unfiltered):
                 if name in f:
                     unfiltered.remove(f)
+
+    # filter remaining files for those with recording extensions
     for f in list(unfiltered):
         if not (f.endswith('.mpg') or f.endswith('.nuv')):
             continue
         orphvids.append(f)
         unfiltered.remove(f)
 
+    # filter remaining files for those with image extensions
     orphimgs = []
     for f in list(unfiltered):
         if not f.endswith('.png'):
@@ -109,6 +131,7 @@ def populate(host=None):
         orphimgs.append(f)
         unfiltered.remove(f)
 
+    # filter remaining files for those that look like database backups
     dbbackup = []
     for f in list(unfiltered):
         if 'sql' not in f:
