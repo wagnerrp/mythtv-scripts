@@ -127,9 +127,9 @@ def main():
                  "episode or station information does not match")
     parser.add_option("-s", "--simulation", action="store_true", default=False, dest="sim",
             help="Find matching recording and print out, but do not create new rule")
-#    parser.add_option("-i", "--intelligent", action="store_true", default=False, dest="smart",
-#            help="Use a 'record one' rule, rather than 'record specific', to allow the "+\
-#                 "scheduler to deal with conflicting recordings intelligently")
+    parser.add_option("-i", "--intelligent", action="store_true", default=False, dest="smart",
+            help="Use a 'record one' rule, rather than 'record specific', to allow the "+\
+                 "scheduler to deal with conflicting recordings intelligently")
     parser.add_option("-p", "--priority", action="store", type="int", default=0, dest="priority",
             help="Specify recording priority for purposes of conflict resolution")
 
@@ -151,10 +151,14 @@ def main():
                             .format(prog.title, Channel(prog.chanid).callsign,
                                     prog.starttime.isoformat())
             if not opts.sim:
-#                if opts.smart:
-#                    rec = Record.fromGuide(prog, Record.kFindOneRecord)
-#                else:
-                rec = Record.fromGuide(prog, Record.kSingleRecord)
+                if opts.smart:
+                    rec = Record.fromPowerRule("{0.title} ({0.subtitle})".format(prog),
+                            where = 'program.title = ? AND program.subtitle = ?',
+                            args = (prog.title, prog.subtitle),
+                            type = Record.kFindOneRecord,
+                            db = DB)
+                else:
+                    rec = Record.fromGuide(prog, Record.kSingleRecord)
                 if opts.priority:
                     rec.recpriority = opts.priority
                     rec.update()
