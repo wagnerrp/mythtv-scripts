@@ -204,14 +204,14 @@ if __name__ == '__main__':
                 print "%d. %s" % (i+1, f)
             try:
                 i = int(raw_input('> '))-1
-                if i in range(0,len(frontends)):
-                    frontend = frontends[i]
-                    wrapper(main)
+                frontend = frontends[i]
+                wrapper(main)
             except KeyboardInterrupt:
                 sys.exit()
             except EOFError:
                 sys.exit()
+            except IndexError:
+                print "This input requires a value between 1 and %d" % len(frontends)
             except:
-                raise
-                print "This input will only accept a number. Use Crtl-C to exit"
+                print "This input will only accept a number. Use Ctrl-C to exit"
 
