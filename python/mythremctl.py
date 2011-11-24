@@ -86,6 +86,8 @@ def query_loc(w, _dat=[0]):
             align(0,w,2,'     %s @ %s' % (pb.group(1),pb.group(2)))
         else:
             pb = rrecorded.match(loc)
+            if pb is None:
+                return
             if pb.group(1) == 'Recorded':
                 show = frontend.sendQuery('recording %s %s' \
                                             % (pb.group(5),pb.group(6)))
@@ -167,6 +169,9 @@ def main(w):
         except MythError:
             print "Remote side closed connection..."
             break
+        except ValueError:
+            # assume an frontend stalled, opening a file
+            pass
         except:
             raise
 
