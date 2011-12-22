@@ -98,6 +98,9 @@ class VIDEO:
                              static.MARKUP.MARK_CUT_END)
         self.vid.update()
 
+        if opts.delete:
+            self.rec.delete()
+
     def get_format(self):
         host = self.db.gethostname()
         # TV Format
@@ -330,6 +333,8 @@ def main():
             help="Copy commercial detection from source recording.")
     parser.add_option("--cutlist", action="store_true", default=False, dest="cutlist",
             help="Copy manual commercial cuts from source recording.")
+    parser.add_option("--delete", action="store_true", default=False,
+            help="Delete recording after successful export.")
     parser.add_option('-v', '--verbose', action='store', type='string', dest='verbose',
             help='Verbosity level')
 
