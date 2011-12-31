@@ -42,11 +42,15 @@ Additional functions are available beyond exporting video
 """
 
 from MythTV import MythDB, Job, Recorded, Video, VideoGrabber,\
-                   MythLog, MythError, static
+                   MythLog, MythError, static, MythBE
 from optparse import OptionParser
 from socket import gethostname
 
-import sys, re, os, time
+import os
+import re
+import sys
+import time
+import hashlib
 
 MYVER = (0,24,0)
 import MythTV
@@ -56,6 +60,15 @@ if MythTV.__version__[:3] != MYVER:
 
 def create_dummy_video(db=None):
     db = MythDB(db)
+
+def hashfile(fd):
+    hasher = hashlib.sha1()
+    while True:
+        buff = fd.read(2**16)
+        if len(buff) == 0:
+            break
+        hasher.update(buff)
+    return hasher.hexdigest()
 
 class VIDEO:
     def __init__(self, opts, jobid=None):
@@ -98,6 +111,7 @@ class VIDEO:
                              static.MARKUP.MARK_CUT_END)
         self.vid.update()
 
+        # delete old file
         if opts.delete:
             self.rec.delete()
 
@@ -249,6 +263,29 @@ class VIDEO:
 
         self.log(MythLog.IMPORTANT|MythLog.FILE, "Transfer Complete",
                             "%d seconds elapsed" % int(time.time()-stime))
+
+        if self.opts.reallysafe:
+            if self.job:
+                self.job.setComment("Checking file hashes")
+            self.log(MythLog.IMPORTANT|MythLog.FILE, "Checking file hashes.")
+            srchash = hashfile(self.rec.open('r'))
+            dsthash = hashfile(self.rec.open('r'))
+            if srchash != dsthash:
+                raise MythError('Source hash (%s) does not match destination hash (%s)' \
+                            % (srchash, dsthash))
+        elif self.opts.safe:
+            self.log(MythLog.IMPORANT|MythLog.FILE, "Checking file sizes.")
+            be = MythBE(db=self.vid._db)
+            try:
+                srcsize = be.getSGFile(self.rec.hostname, self.rec.storagegroup, \
+                                       self.rec.basename)[1]
+                dstsize = be.getSGFile(self.vid.host, 'Videos', self.vid.filename)[1]
+            except:
+                raise MythError('Could not query file size from backend')
+            if srcsize != dstsize:
+                raise MythError('Source size (%d) does not match destination size (%d)' \
+                            % (srcsize, dstsize))
+
         if self.job:
             self.job.setComment("Complete - %d seconds elapsed" % \
                             (int(time.time()-stime)))
@@ -333,8 +370,12 @@ def main():
             help="Copy commercial detection from source recording.")
     parser.add_option("--cutlist", action="store_true", default=False, dest="cutlist",
             help="Copy manual commercial cuts from source recording.")
+    parser.add_option('--safe', action='store_true', default=False, dest='safe',
+            help='Perform quick sanity check of exported file using file size.')
+    parser.add_option('--really-safe', action='store_true', default=False, dest='reallysafe',
+            help='Perform slow sanity check of exported file using SHA1 hash.')
     parser.add_option("--delete", action="store_true", default=False,
-            help="Delete recording after successful export.")
+            help="Delete source recording after successful export. Enforces use of --safe.")
     parser.add_option('-v', '--verbose', action='store', type='string', dest='verbose',
             help='Verbosity level')
 
@@ -353,6 +394,9 @@ def main():
     if opts.fmtprint:
         print_format()
         sys.exit(0)
+
+    if opts.delete:
+        opts.safe = True
 
     if opts.chanid and opts.starttime:
         export = VIDEO(opts)
