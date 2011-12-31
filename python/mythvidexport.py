@@ -12,38 +12,9 @@ __title__  = "MythVidExport"
 __author__ = "Raymond Wagner"
 __version__= "v0.7.2"
 
-usage_txt = """
-This script can be run from the command line, or called through the mythtv
-jobqueue.  The input format will be:
-  mythvidexport.py [options] <--chanid <channel id>> <--starttime <start time>>
-                 --- or ---
-  mythvidexport.py [options] %JOBID%
-
-Options are:
-        --mformat <format string>
-        --tformat <format string>
-        --gformat <format string>
-            overrides the stored format string for a single run
-        --listingonly
-            use EPG data rather than grabbers for metadata
-            will still try to grab episode and season information from ttvdb.py
-        --seektable            copy seek data from recording
-        --skiplist             copy commercial detection from recording
-        --cutlist              copy manual commercial cutlist from recording
-
-Additional functions are available beyond exporting video
-  mythvidexport.py <options>
-        -h, --help             show this help message
-        -p, --printformat      print existing format strings
-        -f, --helpformat       lengthy description for formatting strings
-        --mformat <string>     replace existing Movie format
-        --tformat <string>     replace existing TV format
-        --gformat <string>     replace existing Generic format
-"""
-
 from MythTV import MythDB, Job, Recorded, Video, VideoGrabber,\
                    MythLog, MythError, static, MythBE
-from optparse import OptionParser
+from optparse import OptionParser, OptionGroup
 from socket import gethostname
 
 import os
@@ -342,34 +313,51 @@ def print_format():
 def main():
     parser = OptionParser(usage="usage: %prog [options] [jobid]")
 
-    parser.add_option("-f", "--helpformat", action="store_true", default=False, dest="fmthelp",
+    formatgroup = OptionGroup(parser, "Formatting Options",
+                    "These options are used to display and manipulate the output file formats.")
+    formatgroup.add_option("-f", "--helpformat", action="store_true", default=False, dest="fmthelp",
             help="Print explination of file format string.")
-    parser.add_option("-p", "--printformat", action="store_true", default=False, dest="fmtprint",
+    formatgroup.add_option("-p", "--printformat", action="store_true", default=False, dest="fmtprint",
             help="Print current file format string.")
-    parser.add_option("--tformat", action="store", type="string", dest="tformat",
+    formatgroup.add_option("--tformat", action="store", type="string", dest="tformat",
             help="Use TV format for current task. If no task, store in database.")
-    parser.add_option("--mformat", action="store", type="string", dest="mformat",
+    formatgroup.add_option("--mformat", action="store", type="string", dest="mformat",
             help="Use Movie format for current task. If no task, store in database.")
-    parser.add_option("--gformat", action="store", type="string", dest="gformat",
+    formatgroup.add_option("--gformat", action="store", type="string", dest="gformat",
             help="Use Generic format for current task. If no task, store in database.")
-    parser.add_option("--chanid", action="store", type="int", dest="chanid",
+    parser.add_option_group(formatgroup)
+
+    sourcegroup = OptionGroup(parser, "Source Definition",
+                    "These options can be used to manually specify a recording to operate on "+\
+                    "in place of the job id.")
+    sourcegroup.add_option("--chanid", action="store", type="int", dest="chanid",
             help="Use chanid for manual operation")
-    parser.add_option("--starttime", action="store", type="int", dest="starttime",
+    sourcegroup.add_option("--starttime", action="store", type="int", dest="starttime",
             help="Use starttime for manual operation")
-    parser.add_option("--listingonly", action="store_true", default=False, dest="listingonly",
-            help="Use data from listing provider, rather than grabber")
-    parser.add_option("--seekdata", action="store_true", default=False, dest="seekdata",
-            help="Copy seekdata from source recording.")
-    parser.add_option("--skiplist", action="store_true", default=False, dest="skiplist",
-            help="Copy commercial detection from source recording.")
-    parser.add_option("--cutlist", action="store_true", default=False, dest="cutlist",
-            help="Copy manual commercial cuts from source recording.")
-    parser.add_option('--safe', action='store_true', default=False, dest='safe',
+    parser.add_option_group(sourcegroup)
+
+#    parser.add_option("--listingonly", action="store_true", default=False, dest="listingonly",
+#            help="Use data from listing provider, rather than grabber")
+
+    actiongroup = OptionGroup(parser, "Additional Actions",
+                    "These options perform additional actions after the recording has been exported.")
+    actiongroup.add_option('--safe', action='store_true', default=False, dest='safe',
             help='Perform quick sanity check of exported file using file size.')
-    parser.add_option('--really-safe', action='store_true', default=False, dest='reallysafe',
+    actiongroup.add_option('--really-safe', action='store_true', default=False, dest='reallysafe',
             help='Perform slow sanity check of exported file using SHA1 hash.')
-    parser.add_option("--delete", action="store_true", default=False,
+    actiongroup.add_option("--delete", action="store_true", default=False,
             help="Delete source recording after successful export. Enforces use of --safe.")
+    parser.add_option_group(actiongroup)
+
+    othergroup = OptionGroup(parser, "Other Data",
+                    "These options copy additional information from the source recording.")
+    othergroup.add_option("--seekdata", action="store_true", default=False, dest="seekdata",
+            help="Copy seekdata from source recording.")
+    othergroup.add_option("--skiplist", action="store_true", default=False, dest="skiplist",
+            help="Copy commercial detection from source recording.")
+    othergroup.add_option("--cutlist", action="store_true", default=False, dest="cutlist",
+            help="Copy manual commercial cuts from source recording.")
+    parser.add_option_group(othergroup)
 
     MythLog.loadOptParse(parser)
 
