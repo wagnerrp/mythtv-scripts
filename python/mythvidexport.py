@@ -76,7 +76,7 @@ class VIDEO:
             self.job = Job(jobid)
             self.chanid = self.job.chanid
             self.starttime = self.job.starttime
-            self.job.update(status=3)
+            self.job.update(status=Job.STARTING)
         else:
             self.job = None
             self.chanid = opts.chanid
@@ -245,7 +245,7 @@ class VIDEO:
         dstfp = self.vid.open('w')
 
         if self.job:
-            self.job.setStatus(4)
+            self.job.setStatus(Job.RUNNING)
         tsize = 2**24
         while tsize == 2**24:
             tsize = min(tsize, srcsize - dstfp.tell())
@@ -289,7 +289,7 @@ class VIDEO:
         if self.job:
             self.job.setComment("Complete - %d seconds elapsed" % \
                             (int(time.time()-stime)))
-            self.job.setStatus(256)
+            self.job.setStatus(Job.FINISHED)
 
     def copy_seek(self):
         for seek in self.rec.seek:
@@ -404,7 +404,7 @@ def main():
         try:
             export = VIDEO(opts,int(args[0]))
         except Exception, e:
-            Job(int(args[0])).update({'status':304,
+            Job(int(args[0])).update({'status':Job.ERRORED,
                                       'comment':'ERROR: '+e.args[0]})
             raise
             sys.exit(1)
