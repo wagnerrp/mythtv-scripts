@@ -63,6 +63,11 @@ class VIDEO:
         # process data
         self.get_meta()
         self.get_dest()
+        # bug fix to work around limitation in the bindings where DBDataRef classes
+        # are mapped to the filename at time of Video element creation. since the
+        # filename is specified as blank when the video is created, the markup
+        # handler is not properly initialized
+        self.vid.markup._refdat = (self.vid.filename,)
 
         # save file
         self.copy()
