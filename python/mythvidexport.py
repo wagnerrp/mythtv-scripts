@@ -10,7 +10,7 @@
 #---------------------------
 __title__  = "MythVidExport"
 __author__ = "Raymond Wagner"
-__version__= "v0.7.2"
+__version__= "v0.7.5"
 
 from MythTV import MythDB, Job, Recorded, Video, VideoGrabber,\
                    MythLog, MythError, static, MythBE
