@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 #---------------------------
 # Name: mythvidexport.py
@@ -51,12 +51,6 @@ import re
 import sys
 import time
 import hashlib
-
-MYVER = (0,24,0)
-import MythTV
-if MythTV.__version__[:3] != MYVER:
-    raise Exception('This script expects bindings of version %s.  The currently installed version is %s.'\
-                             % ('.'.join(MYVER), '.'.join(MythTV.__version__))
 
 def create_dummy_video(db=None):
     db = MythDB(db)
@@ -406,7 +400,7 @@ def main():
         except Exception, e:
             Job(int(args[0])).update({'status':Job.ERRORED,
                                       'comment':'ERROR: '+e.args[0]})
-            raise
+            MythLog(module='mythvidexport.py').logTB(MythLog.GENERAL)
             sys.exit(1)
     else:
         if opts.tformat or opts.mformat or opts.gformat:
@@ -414,13 +408,13 @@ def main():
             host = gethostname()
             if opts.tformat:
                 print "Changing TV format to: "+opts.tformat
-                db.setting[host]['mythvideo.TVexportfmt'] = opts.tformat
+                db.settings[host]['mythvideo.TVexportfmt'] = opts.tformat
             if opts.mformat:
                 print "Changing Movie format to: "+opts.mformat
-                db.setting[host]['mythvideo.MOVIEexportfmt'] = opts.mformat
+                db.settings[host]['mythvideo.MOVIEexportfmt'] = opts.mformat
             if opts.gformat:
                 print "Changing Generic format to: "+opts.gformat
-                db.setting[hosts]['mythvideo.GENERICexportfmt'] = opts.gformat
+                db.settings[hosts]['mythvideo.GENERICexportfmt'] = opts.gformat
             sys.exit(0)
         else:
             parser.print_help()
