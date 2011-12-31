@@ -91,7 +91,7 @@ class VIDEO:
 
         # prep objects
         self.rec = Recorded((self.chanid,self.starttime), db=self.db)
-        self.log(MythLog.IMPORTANT, 'Using recording', 
+        self.log(MythLog.GENERAL, MythLog.INFO, 'Using recording',
                         '%s - %s' % (self.rec.title, self.rec.subtitle))
         self.vid = Video(db=self.db).create({'title':'', 'filename':'', 'host':gethostname()})
 
@@ -146,18 +146,18 @@ class VIDEO:
         self.vid.hostname = self.db.gethostname()
         if self.rec.subtitle:  # subtitle exists, assume tv show
             self.type = 'TV'
-            self.log(self.log.IMPORTANT, 'Attempting TV export.')
+            self.log(self.log.GENERAL, self.log.INFO, 'Attempting TV export.')
             grab = VideoGrabber(self.type)
             match = grab.sortedSearch(self.rec.title, self.rec.subtitle)
         else:                   # assume movie
             self.type = 'MOVIE'
-            self.log(self.log.IMPORTANT, 'Attempting Movie export.')
+            self.log(self.log.GENERAL, self.log.INFO, 'Attempting Movie export.')
             grab = VideoGrabber(self.type)
             match = grab.sortedSearch(self.rec.title)
 
         if len(match) == 0:
             # no match found
-            self.log(self.log.IMPORTANT, 'Falling back to generic export.')
+            self.log(self.log.GENERAL, self.log.INFO, 'Falling back to generic export.')
             self.get_generic()
         elif (len(match) > 1) & (match[0].levenshtein > 0):
             # multiple matches found, and closest is not exact
@@ -165,9 +165,9 @@ class VIDEO:
             raise MythError('Multiple metadata matches found: '\
                                                    +self.rec.title)
         else:
-            self.log(self.log.IMPORTANT, 'Importing content from', match[0].inetref)
+            self.log(self.log.GENERAL, self.log.INFO, 'Importing content from', match[0].inetref)
             self.vid.importMetadata(grab.grabInetref(match[0]))
-            self.log(self.log.IMPORTANT, 'Import complete')
+            self.log(self.log.GENERAL, self.log.INFO, 'Import complete')
 
     def get_generic(self):
         self.vid.title = self.rec.title
@@ -237,7 +237,7 @@ class VIDEO:
         srcsize = self.rec.filesize
         htime = [stime,stime,stime,stime]
 
-        self.log.log(MythLog.IMPORTANT|MythLog.FILE, "Copying myth://%s@%s/%s"\
+        self.log(MythLog.GENERAL|MythLog.FILE, MythLog.INFO, "Copying myth://%s@%s/%s"\
                % (self.rec.storagegroup, self.rec.hostname, self.rec.basename)\
                                                     +" to myth://Videos@%s/%s"\
                                           % (self.vid.host, self.vid.filename))
@@ -261,20 +261,20 @@ class VIDEO:
 
         self.vid.hash = self.vid.getHash()
 
-        self.log(MythLog.IMPORTANT|MythLog.FILE, "Transfer Complete",
+        self.log(MythLog.GENERAL|MythLog.FILE, MythLog.INFO, "Transfer Complete",
                             "%d seconds elapsed" % int(time.time()-stime))
 
         if self.opts.reallysafe:
             if self.job:
                 self.job.setComment("Checking file hashes")
-            self.log(MythLog.IMPORTANT|MythLog.FILE, "Checking file hashes.")
+            self.log(MythLog.GENERAL|MythLog.FILE, MythLog.INFO, "Checking file hashes.")
             srchash = hashfile(self.rec.open('r'))
             dsthash = hashfile(self.rec.open('r'))
             if srchash != dsthash:
                 raise MythError('Source hash (%s) does not match destination hash (%s)' \
                             % (srchash, dsthash))
         elif self.opts.safe:
-            self.log(MythLog.IMPORANT|MythLog.FILE, "Checking file sizes.")
+            self.log(MythLog.GENERAL|MythLog.FILE, MythLog.INFO, "Checking file sizes.")
             be = MythBE(db=self.vid._db)
             try:
                 srcsize = be.getSGFile(self.rec.hostname, self.rec.storagegroup, \
@@ -376,8 +376,8 @@ def main():
             help='Perform slow sanity check of exported file using SHA1 hash.')
     parser.add_option("--delete", action="store_true", default=False,
             help="Delete source recording after successful export. Enforces use of --safe.")
-    parser.add_option('-v', '--verbose', action='store', type='string', dest='verbose',
-            help='Verbosity level')
+
+    MythLog.loadOptParse(parser)
 
     opts, args = parser.parse_args()
 
