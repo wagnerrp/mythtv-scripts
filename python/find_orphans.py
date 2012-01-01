@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from MythTV import MythDB, MythBE, Recorded
+from MythTV.utility import datetime
 from socket import timeout
 
 import os
@@ -38,6 +39,14 @@ class MyRecorded( Recorded ):
         if self.subtitle:
             name += ' - '+self.subtitle
         print u'  {0:<70}{1:>28}'.format(name,self.basename)
+    def delete(self, force=False, rerecord=False):
+        if self.doubleorphan:
+#            self.update(deletepending=0)
+            rerecord = False
+        super(MyRecorded, self).delete(force, rerecord)
+    @property
+    def doubleorphan(self):
+        return self.deletepending and ((datetime.now - self.lastmodified).days > 1)
 
 def printrecs(title, recs):
     # print out all recordings in list, followed by a count
@@ -98,6 +107,7 @@ def populate(host=None):
     recs = list(DB.searchRecorded(**kwargs))
 
     zerorecs = []
+    pendrecs = []
     orphvids = []
     for rec in list(recs):
         # run through list of recordings, matching recording basenames with
@@ -108,6 +118,8 @@ def populate(host=None):
             f = unfiltered.pop(i)
             if f.size < 1024:
                 zerorecs.append(rec)
+            elif rec.doubleorphan:
+                pendrecs.append(rec)
             # remove any file with the same basename, these could be snapshots, failed
             # transcode temporary files, or anything else relating to a non-orphaned
             # recording
@@ -139,7 +151,7 @@ def populate(host=None):
         dbbackup.append(f)
         unfiltered.remove(f)
 
-    return (recs, zerorecs, orphvids, orphimgs, dbbackup, unfiltered)
+    return (recs, zerorecs, pendrecs, orphvids, orphimgs, dbbackup, unfiltered)
 
 def delete_recs(recs):
     printrecs('The following recordings will be deleted', recs)
@@ -186,12 +198,14 @@ def delete_files(files):
 
 def main(host=None):
    while True:
-        recs, zerorecs, orphvids, orphimgs, dbbackup, unfiltered = populate(host)
+        recs, zerorecs, pendrecs, orphvids, orphimgs, dbbackup, unfiltered = populate(host)
 
         if len(recs):
             printrecs("Recordings with missing files", recs)
         if len(zerorecs):
             printrecs("Zero byte recordings", zerorecs)
+        if len(pendrecs):
+            printrecs("Forgotten pending deletions", pendrecs)
         if len(orphvids):
             printfiles("Orphaned video files", orphvids)
         if len(orphimgs):
@@ -206,6 +220,8 @@ def main(host=None):
             opts.append(['Delete orphaned recording entries', delete_recs, recs])
         if len(zerorecs):
             opts.append(['Delete zero byte recordings', delete_recs, zerorecs])
+        if len(pendrecs):
+            opts.append(['Forgotten pending deletion recordings', delete_recs, pendrecs])
         if len(orphvids):
             opts.append(['Delete orphaned video files', delete_files, orphvids])
         if len(orphimgs):
