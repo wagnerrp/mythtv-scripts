@@ -58,7 +58,8 @@ class VIDEO:
         self.rec = Recorded((self.chanid,self.starttime), db=self.db)
         self.log(MythLog.GENERAL, MythLog.INFO, 'Using recording',
                         '%s - %s' % (self.rec.title, self.rec.subtitle))
-        self.vid = Video(db=self.db).create({'title':'', 'filename':'', 'host':gethostname()})
+        self.vid = Video(db=self.db).create({'title':'', 'filename':'',
+                                             'host':gethostname()})
 
         # process data
         self.get_meta()
@@ -114,48 +115,61 @@ class VIDEO:
 
     def get_meta(self):
         self.vid.hostname = self.db.gethostname()
-        if self.rec.subtitle:  # subtitle exists, assume tv show
-            self.type = 'TV'
-            self.log(self.log.GENERAL, self.log.INFO, 'Attempting TV export.')
-            grab = VideoGrabber(self.type)
-            match = grab.sortedSearch(self.rec.title, self.rec.subtitle)
-        else:                   # assume movie
-            self.type = 'MOVIE'
-            self.log(self.log.GENERAL, self.log.INFO, 'Attempting Movie export.')
-            grab = VideoGrabber(self.type)
-            match = grab.sortedSearch(self.rec.title)
-
-        if len(match) == 0:
-            # no match found
-            self.log(self.log.GENERAL, self.log.INFO, 'Falling back to generic export.')
-            self.get_generic()
-        elif (len(match) > 1) & (match[0].levenshtein > 0):
-            # multiple matches found, and closest is not exact
-            self.vid.delete()
-            raise MythError('Multiple metadata matches found: '\
-                                                   +self.rec.title)
+        if self.rec.inetref:
+            # good data is available, use it
+            if self.rec.season is not None:
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Performing TV export with local data.')
+                self.type = 'TV'
+            else:
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Performing Movie export with local data.')
+                self.type = 'MOVIE'
+            metadata = self.rec.exportMetadata()
+        elif self.opts.listingonly:
+            # force use of local data
+            if self.rec.subtitle:
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Forcing TV export with local data.')
+                self.type = 'TV'
+            else:
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Forcing Movie export with local data.')
+                self.type = 'MOVIE'
+            metadata = self.rec.exportMetadata()
         else:
-            self.log(self.log.GENERAL, self.log.INFO, 'Importing content from', match[0].inetref)
-            self.vid.importMetadata(grab.grabInetref(match[0]))
-            self.log(self.log.GENERAL, self.log.INFO, 'Import complete')
+            if self.rec.subtitle:
+                # subtitle exists, assume tv show
+                self.type = 'TV'
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Attempting TV export.')
+                grab = VideoGrabber(self.type)
+                match = grab.sortedSearch(self.rec.title, self.rec.subtitle)
+            else:                   # assume movie
+                self.type = 'MOVIE'
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Attempting Movie export.')
+                grab = VideoGrabber(self.type)
+                match = grab.sortedSearch(self.rec.title)
 
-    def get_generic(self):
-        self.vid.title = self.rec.title
-        if self.rec.subtitle:
-            self.vid.subtitle = self.rec.subtitle
-        if self.rec.description:
-            self.vid.plot = self.rec.description
-        if self.rec.originalairdate:
-            self.vid.year = self.rec.originalairdate.year
-            self.vid.releasedate = self.rec.originalairdate
-        lsec = (self.rec.endtime-self.rec.starttime).seconds
-        self.vid.length = str(lsec/60)
-        for member in self.rec.cast:
-            if member.role == 'director':
-                self.vid.director = member.name
-            elif member.role == 'actor':
-                self.vid.cast.append(member.name)
-        self.type = 'GENERIC'
+            if len(match) == 0:
+                # no match found
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Falling back to generic export.')
+                self.type = 'GENERIC'
+                metadata = self.rec.exportMetadata()
+            elif (len(match) > 1) & (match[0].levenshtein > 0):
+                # multiple matches found, and closest is not exact
+                self.vid.delete()
+                raise MythError('Multiple metadata matches found: '\
+                                                   +self.rec.title)
+            else:
+                self.log(self.log.GENERAL, self.log.INFO,
+                        'Importing content from', match[0].inetref)
+                metadata = grab.grabInetref(match[0])
+
+        self.vid.importMetadata(metadata)
+        self.log(self.log.GENERAL, self.log.INFO, 'Import complete')
 
     def get_dest(self):
         if self.type == 'TV':
@@ -180,7 +194,8 @@ class VIDEO:
                 fmt = fmt.replace(tag,'')
 
         # replace fields from program data
-        rep = ( ('%HOSTNAME','hostname','%s'),('%STORAGEGROUP%','storagegroup','%s'))
+        rep = ( ('%HOSTNAME%',    'hostname',    '%s'),
+                ('%STORAGEGROUP%','storagegroup','%s'))
         for tag, data, format in rep:
             data = getattr(self.rec, data)
             fmt = fmt.replace(tag,format % data)
@@ -330,6 +345,8 @@ def main():
             help="Use Movie format for current task. If no task, store in database.")
     formatgroup.add_option("--gformat", action="store", type="string", dest="gformat",
             help="Use Generic format for current task. If no task, store in database.")
+    formatgroup.add_option("--listingonly", action="store_true", default=False, dest="listingonly",
+            help="Use data from listing provider, rather than grabber")
     parser.add_option_group(formatgroup)
 
     sourcegroup = OptionGroup(parser, "Source Definition",
@@ -340,9 +357,6 @@ def main():
     sourcegroup.add_option("--starttime", action="store", type="int", dest="starttime",
             help="Use starttime for manual operation")
     parser.add_option_group(sourcegroup)
-
-#    parser.add_option("--listingonly", action="store_true", default=False, dest="listingonly",
-#            help="Use data from listing provider, rather than grabber")
 
     actiongroup = OptionGroup(parser, "Additional Actions",
                     "These options perform additional actions after the recording has been exported.")
