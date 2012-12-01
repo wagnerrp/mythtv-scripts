@@ -421,7 +421,7 @@ def main():
                 db.settings[host]['mythvideo.MOVIEexportfmt'] = opts.mformat
             if opts.gformat:
                 print "Changing Generic format to: "+opts.gformat
-                db.settings[hosts]['mythvideo.GENERICexportfmt'] = opts.gformat
+                db.settings[host]['mythvideo.GENERICexportfmt'] = opts.gformat
             sys.exit(0)
         else:
             parser.print_help()
