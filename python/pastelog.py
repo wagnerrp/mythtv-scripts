@@ -43,6 +43,7 @@ class EngineType( type ):
 class Engine( object ):
     __metaclass__ = EngineType
     _engines = OrderedDict()
+    size = 0
 
     def post(self, instance):
         instance = list(instance)
@@ -51,8 +52,25 @@ class Engine( object ):
 
         from cStringIO import StringIO
         s = StringIO()
+        count = 1
         for msg in instance:
+            if self.size:
+                loc = s.tell()
+
             msg.toFile(s)
+
+            if self.size and (s.tell() > self.size):
+                s.seek(loc)
+                s.truncate()
+                url = self._post(name+'p'+count, s.getvalue())
+                print "{0:<40} : {1}".format(name+'p'+count, url)
+                count += 1
+                s.seek(0)
+                s.truncate()
+                msg.toFile(s)
+
+        if count > 1:
+            name += 'p'+count
 
         url = self._post(name, s.getvalue())
         print "{0:<40} : {1}".format(name, url)
@@ -64,6 +82,7 @@ class Engine( object ):
 class Pastebin( Engine ):
     site = "pastebin.com"
     key = "8ee9b3e538215e0f32e7e325164f15b3"
+    size = 2**19
 
     def _post(self, name, msg):
         data = {'api_option':           'paste',
