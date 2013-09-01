@@ -118,7 +118,7 @@ class VIDEO:
         self.vid.hostname = self.db.gethostname()
         if self.rec.inetref:
             # good data is available, use it
-            if self.rec.season is not None:
+            if self.rec.season > 0 or self.rec.episode > 0:
                 self.log(self.log.GENERAL, self.log.INFO,
                         'Performing TV export with local data.')
                 self.type = 'TV'
