@@ -122,11 +122,14 @@ class VIDEO:
                 self.log(self.log.GENERAL, self.log.INFO,
                         'Performing TV export with local data.')
                 self.type = 'TV'
+                grab = VideoGrabber(self.type)
+                metadata = grab.grabInetref(self.rec.inetref, self.rec.season, self.rec.episode)
             else:
                 self.log(self.log.GENERAL, self.log.INFO,
                         'Performing Movie export with local data.')
                 self.type = 'MOVIE'
-            metadata = self.rec.exportMetadata()
+                grab = VideoGrabber(self.type)
+                metadata = grab.grabInetref(self.rec.inetref)
         elif self.opts.listingonly:
             # force use of local data
             if self.rec.subtitle:
