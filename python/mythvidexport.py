@@ -57,7 +57,8 @@ class VIDEO:
         # prep objects
         self.rec = Recorded((self.chanid,self.starttime), db=self.db)
         self.log(MythLog.GENERAL, MythLog.INFO, 'Using recording',
-                        '%s - %s' % (self.rec.title, self.rec.subtitle))
+                        '%s - %s' % (self.rec.title.encode('utf-8'), 
+                                     self.rec.subtitle.encode('utf-8')))
         self.vid = Video(db=self.db).create({'title':'', 'filename':'',
                                              'host':gethostname()})
 
