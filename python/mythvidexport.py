@@ -231,7 +231,8 @@ class VIDEO:
                                                     +" to myth://Videos@%s/%s"\
                                           % (self.vid.host, self.vid.filename))
         srcfp = self.rec.open('r')
-        dstfp = self.vid.open('w')
+        dstfp = self.vid.open('w', nooverwrite=True)
+
 
         if self.job:
             self.job.setStatus(Job.RUNNING)
