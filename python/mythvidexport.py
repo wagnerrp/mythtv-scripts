@@ -359,7 +359,7 @@ def main():
                     "in place of the job id.")
     sourcegroup.add_option("--chanid", action="store", type="int", dest="chanid",
             help="Use chanid for manual operation")
-    sourcegroup.add_option("--starttime", action="store", type="int", dest="starttime",
+    sourcegroup.add_option("--starttime", action="store", type="string", dest="starttime",
             help="Use starttime for manual operation")
     parser.add_option_group(sourcegroup)
 
