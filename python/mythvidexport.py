@@ -259,7 +259,7 @@ class VIDEO:
                 self.job.setComment("Checking file hashes")
             self.log(MythLog.GENERAL|MythLog.FILE, MythLog.INFO, "Checking file hashes.")
             srchash = hashfile(self.rec.open('r'))
-            dsthash = hashfile(self.rec.open('r'))
+            dsthash = hashfile(self.vid.open('r'))
             if srchash != dsthash:
                 raise MythError('Source hash (%s) does not match destination hash (%s)' \
                             % (srchash, dsthash))
